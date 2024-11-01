@@ -25,7 +25,8 @@ SRC = source/iommu_ja.adoc
 # --require=asciidoctor-mathematical
 
 all:
-	$(ASCIIDOCTOR_HTML) $(SRC) -r asciidoctor-diagram -D html
-	$(ASCIIDOCTOR_PDF)  -a scripts=cjk -a pdf-theme=default-with-fallback-font $(SRC) $(REQUIRES) $(OPTIONS) -o pdf/iommu_ja.pdf
+	bundle install --path vendor/bundle
+	bundle exec $(ASCIIDOCTOR_HTML) $(SRC) -r asciidoctor-diagram -D html
+	bundle exec $(ASCIIDOCTOR_PDF)  -a scripts=cjk -a pdf-theme=default-with-fallback-font $(SRC) $(REQUIRES) $(OPTIONS) -o pdf/iommu_ja.pdf
 
 #	asciidoctor-pdf source/iommu_ja.adoc -o pdf/iommu_ja.pdf
