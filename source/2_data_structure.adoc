@@ -317,4 +317,205 @@ IOMMUは、システムに統合されたHARTのMMUがサポートするモー�
 ====
 
 ===== 変換属性(`ta`)
->>>>>>> d9d8af7dd17cdd275dcc788df6b19b01798051f3
+
+.変換属性 (`ta`) フィールド
+[wavedrom, , svg]
+....
+{reg: [
+  {bits: 1,  name: 'V',        attr: '1'},
+  {bits: 1,  name: 'ENS',     attr: '1'},
+  {bits: 1,  name: 'SUM',    attr: '1'},
+  {bits: 9, name: 'reserved', attr: '9'},
+  {bits: 20, name: 'PSCID',    attr: '20'},
+  {bits: 32, name: 'reserved', attr: '32'},
+], config:{lanes: 4, hspace: 1024, fontsize: 16}}
+....
+
+`ta` の `PSCID` フィールドは、プロセスのアドレス空間を識別するプロセス・ソフト・コンテキストID を提供する。
+`PSCID` は、アドレス空間ごとのアドレス変換フェンスを容易にする。
+`DC.tc.PDTV` が `0` で `iosatp.MODE` フィールドが `Bare` でない場合、`ta` の `PSCID` フィールドがアドレス空間 ID として使用される。
+`DC.tc.PDTV` が `1` の場合、 `ta` の `PSCID` フィールドは無視される。
+
+===== ファースト・ステージ・コンテキスト (`fsc`)
+
+`DC.tc.PDTV` が0の場合、`DC.fsc` フィールドは、第一段階のアドレス変換とプロテクションのコントロールを提供する `iosatp` を保持する。
+
+.ファースト・ステージ・コンテキスト・フィールド
+[wavedrom, , svg]
+....
+{reg: [
+  {bits: 44, name: 'PPN'},
+  {bits: 16, name: 'reserved'},
+  {bits: 4,  name: 'MODE'},
+], config:{lanes: 2, hspace: 1024, fontsize: 16}}
+....
+
+第1ステージのページテーブルフォーマットは、Privileged仕様で定義されている通りである。
+
+`DC.tc.SXL` フィールドは、サポートされるページド仮想メモリ方式を制御する。
+
+`iosatp.MODE` は、ページングされた仮想メモリ方式を識別し、表3で定義されているように符号化される。
+`iosatp.PPN` フィールドは、第1ステージページテーブルのルートページのPPNを保持する。
+
+第2段階のアドレス変換が `Bare` でない場合、`iosatp.PPN` はゲスト `PPN` である。
+その後、 `iohgatp` によって制御されるゲスト物理アドレス変換プロセスによって、ルートページの GPA がスーパーバイザ物理アドレスに変換される。
+
+[[IOSATP_MODE_ENC]]
+.`iosatp.MODE` フィールドのエンコーディング
+[%autowidth,float="center",align="center"]
+[%header, cols="^3,^3,20"]
+|===
+3+^|               `DC.tc.SXL=0`
+^|Value ^| Name     ^| Description
+| 0    | `Bare`   | 変換も保護もない。
+| 1-7  | --       | 標準的な使用のために予約されている。
+| 8    | `Sv39`   | ページベースの39ビット仮想アドレッシング。
+| 9    | `Sv48`   | ページベースの48ビット仮想アドレッシング。
+| 10   | `Sv57`   | ページベースの57ビット仮想アドレッシング。
+| 11-13| --       | 標準的な使用のために予約されている。
+| 14-15| --       | カスタム仕様。
+3+^|               `DC.tc.SXL=1`
+|Value | Name     | Description
+| 0    | `Bare`   | 変換も保護もない。
+| 1-7  | --       | 標準的な使用のために予約されている。
+| 8    | `Sv32`   | ページベースの32ビット仮想アドレッシング。
+| 9-15 | --       | 標準的な使用のために予約されている。
+|===
+
+`DC.tc.PDTV` が1の場合、 `DC.fsc` フィールドはプロセス・ディレクトリ・テーブル・ポインタ (`pdtp`) を保持する。
+デバイスが `process_id` によって選択された複数のプロセス・コンテキストをサポートしている場合、 `PDT` は、仮想アドレス変換と保護のために、第1段階のページ・テーブルと関連する `PSCID` を決定するために使用される。
+
+`pdtp` フィールドはルート `PDT` の `PPN` を保持し、 `MODE` フィールドは `PDT` のレベル数を決定する。
+
+.Process-directory table pointer (`pdtp`) field
+[wavedrom, , svg]
+....
+{reg: [
+  {bits: 44, name: 'PPN'},
+  {bits: 16, name: 'reserved'},
+  {bits: 4,  name: 'MODE'},
+], config:{lanes: 2, hspace: 1024, fontsize: 16}}
+....
+
+第2段階のアドレス変換が `Bare` でない場合、 `pdtp.PPN` フィールドはゲスト `PPN` を保持する。
+その後、 `iohgatp` によって制御されるゲスト物理アドレス変換プロセスによって、ルート `PDT` の `GPA` がスーパーバイザ物理アドレスに変換される。
+第2ステージのページテーブルを使用して `PDT` のアドレスを変換すると、 `PDT` をゲストOSによって割り当てられたメモリに保持できるようになり、ゲストOSがPDTを直接編集して、第1ステージのページテーブルによって識別される仮想アドレス空間を `process_id` に関連付けることができる。
+
+[[PDTP_MODE_ENC]]
+.`pdtp.MODE` フィールドのエンコード
+[%autowidth,float="center",align="center"]
+[%header, cols="^3,^3,20"]
+|===
+^|値 ^| 名前     ^| 説明
+| 0    | `Bare`   | 第一段階のアドレス変換もプロテクションもない。
+| 1    | `PD8`    | 8ビットのプロセスIDが有効。 `process_id` のビット `19:8` は0でなければならない。
+| 2    | `PD17`   | 17ビットのプロセスIDが有効。ディレクトリには2つのレベルがある。ルートPDTページには512エントリ、リーフ・レベルには256エントリがある。 `process_id` のビット19:17は0でなければならない。
+| 3    | `PD20`   | 20ビットのプロセスIDが有効。ディレクトリには3つのレベルがある。ルートPDTには8エントリがあり、次の非リーフレベルには512エントリがある。リーフレベルには256のエントリーがある。
+|  4-13| --       | 標準的な使用のために予約されている。
+| 14-15| --       | カスタム仕様。
+|===
+
+===== MSI ページテーブルポインタ (`msiptp`)
+
+..MSIページテーブルポインタ(`msiptp`)フィールド
+
+[wavedrom, , svg]
+....
+{reg: [
+  {bits: 44, name: 'PPN'},
+  {bits: 16, name: 'reserved'},
+  {bits: 4,  name: 'MODE'},
+], config:{lanes: 2, hspace: 1024, fontsize: 16}}
+....
+
+`msiptp.PPN` フィールドは、 `IMSIC` 内のゲスト割り込みファイルに MSI を指示するために使用されるルート MSI ページ・テーブルの PPN を保持する。
+MSI ページ・テーブルのフォーマットは、Advanced Interrupt Architecture 仕様で定義されている。
+
+`msiptp.MODE` フィールドは、MSIアドレス変換スキームを選択するために使用される。
+
+<<<
+
+.`msiptp.MODE` フィールドのエンコーディング
+[%autowidth,float="center",align="center"]
+[%header, cols="^3,^3,20"]
+|===
+^|Value ^| Name     ^| Description
+| 0    | `Off`    | MSIアドレスマスクとパターンを使用した仮想割り込みファイルへのアクセスの認識が行われない。
+| 1    | `Flat`   | フラットMSIページテーブル。
+|  2-13| --       | 標準的な使用のために予約されている。
+| 14-15| --       | カスタム仕様。
+|===
+
+
+===== MSI アドレスマスク (`msi_addr_mask`) とパターン (`msi_addr_pattern`)
+
+..MSIアドレス・マスク(`msi_addr_mask`)フィールド
+[wavedrom, , svg]
+....
+{reg: [
+  {bits: 52, name: 'mask'},
+  {bits: 12, name: 'reserved'},
+], config:{lanes: 2, hspace: 1024, fontsize: 16}}
+....
+.MSIアドレス・パターン(`msi_addr_pattern`)フィールド
+[wavedrom, , svg]
+....
+{reg: [
+  {bits: 52, name: 'pattern'},
+  {bits: 12, name: 'reserved'},
+], config:{lanes: 2, hspace: 1024, fontsize: 16}}
+....
+MSI アドレス・マスク (msi_addr_mask) およびパターン (msi_addr_pattern) フィールドは、関連する VM のゲスト物理アドレス空間内の仮想割り込みファイルの 4-KiB ページを識別するために使用される。
+デバイスによって行われる着信メモリ・アクセスは、宛先のゲスト物理ページが、指定されたアドレス・マスクのすべてのビット位置で指定されたアドレス・パターンに一致する場合に、仮想割り込みファイルへのアクセスとして認識される。
+詳細には、ゲスト物理アドレスAへのメモリ・アクセスは、以下の場合に仮想割込みファイルのメモリ・マップド・ページへのアクセスとして認識される:
+
+`(A >> 12) & ~msi_addr_mask = (msi_addr_pattern & ~msi_addr_mask)`
+
+ここで、>> 12は12ビット右シフトを表し、アンパサンド（&）はビットごとの論理ANDを表し、 `~msi_addr_mask` はアドレスマスクのビットごとの論理補数である。
+
+=== 2.1.4. デバイス・コンテキスト設定チェック
+
+`DC.tc.V=1` の `DC` は、以下の条件のいずれかが真である場合、misconfiguredとみなされる。
+設定ミスの場合、停止し、"DDT entry misconfigured" (cause = 259)と報告する。
+
+. 将来の標準使用のために予約されているビットやエンコーディングが設定されている場合。
+. `capabilities.ATS` が0で、 `DC.tc.EN_ATS` 、または `DC.tc.EN_PRI` 、または `DC.tc.PRPR` が1である。
+. `DC.tc.EN_ATS` が0、 `DC.tc.T2GPA` が1
+. `DC.tc.EN_ATS` が0、 `DC.tc.EN_PRI` が1
+. `DC.tc.EN_PRI` が0、 `DC.tc.PRPR` が1
+. `capabilities.T2GPA` は0、 `DC.tc.T2GPA` は1である。
+. `DC.tc.T2GPA` は1、 `DC.iohgatp.MODE` は `Bare` である。
+. `DC.tc.PDTV` が1であり、 `DC.fsc.pdtp.MODE` がサポートされていないモードである。
+.. `capabilities.PD20` が0で、 `DC.fsc.ptp.MODE` が `PD20` の場合
+.. `capabilities.PD17` が0で、 `DC.fsc.ptp.MODE` が `PD17` の場合
+.. `capabilities.PD8` が0で、`DC.fsc.ptp.MODE` が `PD8` の場合
+. `DC.tc.PDTV` が0であり、かつ `DC.fsc.iosatp.MODE` エンコーディングが表3によって決定される有効なエンコーディングではないこと。
+. `DC.tc.PDTV` が0、 `DC.tc.SXL` が0, `DC.fsc.iosatp.MODE` がサポートされているモードではない
+.. `capabilities.Sv39` は0、 `DC.fsc.iosatp.MODE` は `Sv39`
+.. `capabilities.Sv48` は0、 `DC.fsc.iosatp.MODE` は `Sv48`
+.. `capabilities.Sv57` は0、 `DC.fsc.iosatp.MODE` は `Sv57`
+. `DC.tc.PDTV` が0、 `DC.tc.SXL` が1 `DC.fsc.iosatp.MODE` がサポートされているモードではない
+.. `capabilities.Sv32` は 0 で、 `DC.fsc.iosatp.MODE` は `Sv32`
+. `DC.tc.PDTV` が0、 `DC.tc.DPE` が1
+. `DC.iohgatp.MODE` エンコーディングは、表2によって決定される有効なエンコーディングではない。
+. `fctl.GXL` が0であり、`DC.iohgatp.MODE` がサポートされていないモードである。
+.. `capabilities.Sv39x4` は0、`DC.iohgatp.MODE`は `Sv39x4`
+.. `capabilities.Sv48x4` は0、`DC.iohgatp.MODE`は `Sv48x4`
+.. `capabilities.Sv57x4` は0、`DC.iohgatp.MODE`は `Sv57x4`
+. `fctl.GXL`が1であり、`DC.iohgatp.MODE`がサポートされていないモードである。
+.. `capabilities.Sv32x4` が0、`DC.iohgatp.MODE`が `Sv32x4`
+. `capabilities.MSI_FLAT` が1であり、 `DC.msiptp.MODE` が `Off` でも `Flat` でもない。
+. `DC.iohgatp.MODE`が `Bare` ではなく、`DC.iohgatp.PPN` によって決定されるルートページ表が16-KiB境界にアライメントされていない。
+. `capabilities.AMO_HWAD` が0で、 `DC.tc.SADE` または `DC.tc.GADE` が1である。
+. `capabilities.END` が0かつ `fctl.BE != DC.tc.SBE`
+. `DC.tc.SXL` の値が正当な値でない。`fctl.GXL`が1の場合、 `DC.tc.SXL` は1でなければならない。`fctl.GXL`が0で書き込み可能な場合、`DC.tc.SXL` は0でも1でもよい。`fctl.GXL`が0で書き込み可能でない場合、`DC.tc.SXL` は0でなければならない。
+. `DC.tc.SBE` の値が正当な値でない。`fctl.BE` が書き込み可能な場合、 `DC.tc.SBE` は0または1である。もし`fctl.BE` がが書き込み可能でない場合、 `DC.tc.SBE` は `fctl.BE` と同じでなければならない。
+
+[NOTE]
+====
+一部の `DC` フィールドは、スーパーバイザ物理アドレスまたはゲスト物理アドレスを保持する。
+一部の実装では、 `DC` の位置を特定するときに、 `capabilities.PAS` などで決定されるサポート範囲よりもスーパバイザ物理アドレスの幅が広くないなど、アドレスの有効性を検証することがある。
+このような実装では、"DDTentry misconfigured"(cause=259)フォルトが発生する可能性がある。
+他の実装では、これらのフィールドによって参照されるデータ構造にアクセスする必要がある場合にのみ、このようなアドレスが無効であることを検出する。
+そのような実装はは、アクセスの過程でアクセス違反の故障を検出する可能性がある。
+====

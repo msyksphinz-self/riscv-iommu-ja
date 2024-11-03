@@ -25,8 +25,10 @@ SRC = source/iommu_ja.adoc
 # --require=asciidoctor-mathematical
 
 all:
-	bundle install --path vendor/bundle
+	asciidoctor -b docbook $(SRC)
+	pandoc -f docbook -t markdown_strict source/iommu_ja.xml -o iommu_ja.md
 	bundle exec $(ASCIIDOCTOR_HTML) $(SRC) -r asciidoctor-diagram -D html
 	bundle exec $(ASCIIDOCTOR_PDF)  -a scripts=cjk -a pdf-theme=default-with-fallback-font $(SRC) $(REQUIRES) $(OPTIONS) -o pdf/iommu_ja.pdf
 
+#	bundle install --path vendor/bundle
 #	asciidoctor-pdf source/iommu_ja.adoc -o pdf/iommu_ja.pdf
